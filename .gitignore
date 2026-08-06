@@ -1,0 +1,31 @@
+# Node modules
+node_modules/
+npm-debug.log
+dist/
+build/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.gradle/
+*.keystore
+*.jks
+
+# iOS
+ios/build/
+ios/Pods/
+
+# Environment
+.env
+.env.*
+
+# System
+.DS_Store
+Thumbs.db
