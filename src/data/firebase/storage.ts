@@ -26,11 +26,12 @@ import {
  */
 export async function uploadImage(
   localUri: string,
-  folderName: string,
+  workspaceId: string,
+  folderName: 'products' | 'orders',
 ): Promise<string> {
   const extension = extensionFromUri(localUri);
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${extension}`;
-  const storageRef = ref(storage, `${folderName}/${fileName}`);
+  const storageRef = ref(storage, `workspaces/${workspaceId}/${folderName}/${fileName}`);
   const metadata = { contentType: contentTypeFor(extension) };
 
   if (Platform.OS === 'web') {

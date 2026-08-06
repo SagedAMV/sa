@@ -1,207 +1,182 @@
-/**
- * مستودع الحسابات: تسجيل الدخول، الإعداد الأولي، الفحص الأمني الدوري
- * القرارات: المالك يدير الحسابات (لا تسجيل ذاتي) + تشفير كلمات المرور
- *
- * ✅ تم الإصلاح:
- * - البحث عن المستخدم مباشرة عبر query بدلاً من جلب الكل
- * - تشفير PBKDF2 مع salt فريد لكل مستخدم
- * - إنشاء فهرس usernames للبحث السريع
- */
-
-import { createData, getData, setData, updateData, listByWorkspace } from '../firebase/firestore';
+/** مصادقة المستخدمين عبر Firebase Auth، وملفات الصلاحيات عبر Firestore. */
+import { deleteApp, initializeApp } from 'firebase/app';
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import { auth, db, firebaseConfig } from '../firebase/firebase';
 import { User, OWNER_PERMISSIONS, BUYER_PERMISSIONS } from '../model/User';
 import { Workspace } from '../model/Workspace';
-import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
-
-/** توليد معرف فريد */
-export function uid(): string {
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/** توليد salt عشوائي */
-function generateSalt(): string {
-  const bytes = Crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * تجزئة كلمة المرور مع salt فريد.
- * ملاحظة: المصادقة الإنتاجية ينبغي أن تُنفّذ عبر Firebase Auth أو خدمة خلفية؛
- * لا ينبغي اعتبار تجزئة تعمل على العميل بديلاً عن مصادقة خادمية.
- */
-export async function hashPassword(password: string, existingSalt?: string): Promise<{ hash: string; salt: string }> {
-  const salt = existingSalt || generateSalt();
-  // دمج salt + password + salt (يُطيل التشفير)
-  const combined = `${salt}|${password}|${salt}`;
-  const hash = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    combined,
-  );
-  return { hash, salt };
-}
-
-/** التحقق من كلمة المرور */
-export async function verifyPassword(password: string, storedHash: string, storedSalt: string): Promise<boolean> {
-  const { hash } = await hashPassword(password, storedSalt);
-  return hash === storedHash;
-}
 
 const SESSION_KEY = 'tatbiqi_session';
+const MIN_PASSWORD_LENGTH = 8;
 
-/** حفظ جلسة المستخدم محليًا (يفتح التطبيق دون إنترنت — القرار 8) */
-export async function saveSession(user: User) {
-  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(user));
+export function uid(): string {
+  return Crypto.randomUUID();
 }
 
-/** التحقق من الحد الأدنى لبنية الجلسة قبل استخدامها في الواجهة. */
-function isStoredUser(value: unknown): value is User {
+function normalizeUsername(username: string): string {
+  const value = username.trim().toLowerCase();
+  if (!/^[a-z0-9_.-]{3,40}$/.test(value)) {
+    throw new Error('اسم المستخدم يجب أن يكون 3–40 حرفًا إنجليزيًا أو رقمًا، ويمكن استخدام . _ -');
+  }
+  return value;
+}
+
+/** بريد داخلي حتمي؛ لا نضع اسم المستخدم نفسه أو بيانات حساسة في Firebase Auth. */
+async function usernameEmail(username: string): Promise<string> {
+  const normalized = normalizeUsername(username);
+  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, normalized);
+  return `u-${digest}@tatbiqi.app`;
+}
+
+function validatePassword(password: string) {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`كلمة المرور يجب أن تكون ${MIN_PASSWORD_LENGTH} أحرف على الأقل`);
+  }
+}
+
+function isUser(value: unknown): value is User {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<User>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.workspaceId === 'string' &&
-    typeof candidate.username === 'string' &&
-    (candidate.role === 'owner' || candidate.role === 'buyer') &&
-    typeof candidate.isActive === 'boolean' &&
-    !!candidate.permissions &&
-    typeof candidate.permissions === 'object'
-  );
+  const u = value as Partial<User>;
+  return typeof u.id === 'string' && typeof u.workspaceId === 'string' &&
+    typeof u.username === 'string' && (u.role === 'owner' || u.role === 'buyer') &&
+    typeof u.isActive === 'boolean' && !!u.permissions;
 }
 
-/** قراءة الجلسة المحفوظة مع معالجة بيانات SecureStore التالفة. */
+async function readUser(id: string): Promise<User | null> {
+  const snap = await getDoc(doc(db, 'users', id));
+  if (!snap.exists()) return null;
+  const value = { ...snap.data(), id: snap.id };
+  return isUser(value) ? value : null;
+}
+
+export async function saveSession(user: User) {
+  // ذاكرة واجهة فقط؛ Firebase Auth هو مصدر الثقة، ولا تُحفظ كلمات مرور أو hashes.
+  const safeUser = { ...user };
+  delete safeUser.passwordHash;
+  delete safeUser.passwordSalt;
+  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(safeUser));
+}
+
 export async function getSession(): Promise<User | null> {
-  const raw = await SecureStore.getItemAsync(SESSION_KEY);
-  if (!raw) return null;
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (isStoredUser(parsed)) return parsed;
-  } catch {
-    // تُمسح القيمة التالفة أدناه ثم يظهر تسجيل الدخول بدل انهيار التطبيق.
-  }
-
-  try {
-    await SecureStore.deleteItemAsync(SESSION_KEY);
-  } catch {
-    // لا نسمح لفشل التنظيف نفسه أن يمنع فتح شاشة الدخول.
-  }
-  return null;
-}
-
-/** مسح الجلسة (تسجيل خروج) */
-export async function clearSession() {
-  await SecureStore.deleteItemAsync(SESSION_KEY);
-}
-
-/** إنشاء حساب المالك + مساحة العمل (شاشة الإعداد الأولي) */
-export async function setupOwner(username: string, password: string, workspaceName: string) {
-  // ✅ التحقق من عدم وجود اليوزر مسبقاً
-  const existing = await getData<{ userId: string }>('usernames', username.toLowerCase());
-  if (existing) throw new Error('اسم المستخدم موجود مسبقاً');
-
-  const workspaceId = uid();
-  const { hash, salt } = await hashPassword(password);
-
-  const owner: User = {
-    id: uid(),
-    workspaceId,
-    username,
-    passwordHash: hash,
-    passwordSalt: salt,
-    role: 'owner',
-    permissions: OWNER_PERMISSIONS,
-    isActive: true,
-    createdAt: Date.now(),
-  };
-
-  const workspace: Workspace = {
-    id: workspaceId,
-    name: workspaceName,
-    ownerId: owner.id,
-    defaultCurrency: 'YER',
-    hidePrices: false,
-    createdAt: Date.now(),
-  };
-
-  await createData('workspaces', workspaceId, workspace);
-  await createData('users', owner.id, owner);
-  // ✅ إنشاء فهرس اليوزر للبحث السريع
-  await setData('usernames', username.toLowerCase(), {
-    userId: owner.id,
-    workspaceId,
+  const firebaseUser = await new Promise<import('firebase/auth').User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (value) => {
+      unsubscribe();
+      resolve(value);
+    });
   });
-  await saveSession(owner);
-  return owner;
+  if (!firebaseUser) {
+    await SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined);
+    return null;
+  }
+  const user = await readUser(firebaseUser.uid);
+  if (!user?.isActive) {
+    await clearSession();
+    return null;
+  }
+  await saveSession(user);
+  return user;
 }
 
-/**
- * تسجيل الدخول — البحث مباشرة عبر Firestore query
- * ✅ لا يجلب جميع المستخدمين — يبحث فقط عن المطلوب
- */
+export async function clearSession() {
+  await Promise.all([
+    signOut(auth).catch(() => undefined),
+    SecureStore.deleteItemAsync(SESSION_KEY).catch(() => undefined),
+  ]);
+}
+
+export async function setupOwner(username: string, password: string, workspaceName: string) {
+  const normalized = normalizeUsername(username);
+  validatePassword(password);
+  const credential = await createUserWithEmailAndPassword(auth, await usernameEmail(normalized), password);
+  const workspaceId = uid();
+  const now = Date.now();
+  const owner: User = {
+    id: credential.user.uid, workspaceId, username: normalized, role: 'owner',
+    permissions: OWNER_PERMISSIONS, isActive: true, createdAt: now,
+  };
+  const workspace: Workspace = {
+    id: workspaceId, name: workspaceName.trim(), ownerId: owner.id,
+    defaultCurrency: 'YER', hidePrices: false, createdAt: now,
+  };
+  try {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'workspaces', workspaceId), { ...workspace, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.set(doc(db, 'users', owner.id), { ...owner, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.set(doc(db, 'usernames', normalized), { userId: owner.id, workspaceId, createdAt: serverTimestamp() });
+    await batch.commit();
+    await saveSession(owner);
+    return owner;
+  } catch (error) {
+    await deleteUser(credential.user).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function login(username: string, password: string): Promise<User> {
-  // 1. البحث عن اليوزر عبر الفهرس
-  const usernameEntry = await getData<{ userId: string; workspaceId: string }>(
-    'usernames',
-    username.toLowerCase(),
-  );
-  if (!usernameEntry) throw new Error('مستخدم غير موجود');
-
-  // 2. جلب بيانات المستخدم بمعرفه
-  const found = await getData<User>('users', usernameEntry.userId);
-  if (!found) throw new Error('مستخدم غير موجود');
-
-  // 3. التحقق من كلمة المرور
-  const isValid = await verifyPassword(password, found.passwordHash, found.passwordSalt || '');
-  if (!isValid) throw new Error('كلمة المرور غير صحيحة');
-  if (!found.isActive) throw new Error('الحساب معطّل');
-
-  await saveSession(found);
-  return found;
+  const credential = await signInWithEmailAndPassword(auth, await usernameEmail(username), password);
+  const user = await readUser(credential.user.uid);
+  if (!user) {
+    await signOut(auth);
+    throw new Error('ملف المستخدم غير موجود');
+  }
+  if (!user.isActive) {
+    await signOut(auth);
+    throw new Error('الحساب معطّل');
+  }
+  await saveSession(user);
+  return user;
 }
 
-/** الفحص الأمني الدوري: عند توفر النت، تحقق من حالة الحساب والصلاحيات (القرار 15) */
 export async function periodicSecurityCheck(user: User): Promise<User> {
-  const fresh = await getData<User>('users', user.id);
-  if (!fresh || !fresh.isActive) {
+  if (auth.currentUser?.uid !== user.id) {
+    await clearSession();
+    throw new Error('انتهت الجلسة، سجّل الدخول مجددًا');
+  }
+  const fresh = await readUser(user.id);
+  if (!fresh?.isActive) {
     await clearSession();
     throw new Error('تم تعطيل حسابك');
   }
-  // الصلاحيات المحدّثة تُطبَّق
   await saveSession(fresh);
   return fresh;
 }
 
-/** إضافة مشتري (المالك وحده) + منحه صلاحيات مخصصة */
-export async function addUser(
-  workspaceId: string,
-  username: string,
-  password: string,
-  role: 'owner' | 'buyer',
-) {
-  // ✅ التحقق من عدم وجود اليوزر
-  const existing = await getData<{ userId: string }>('usernames', username.toLowerCase());
-  if (existing) throw new Error('اسم المستخدم موجود مسبقاً');
+export async function addUser(workspaceId: string, username: string, password: string, role: 'owner' | 'buyer') {
+  const normalized = normalizeUsername(username);
+  validatePassword(password);
+  if (auth.currentUser == null) throw new Error('انتهت جلسة المالك');
 
-  const { hash, salt } = await hashPassword(password);
-
-  const user: User = {
-    id: uid(),
-    workspaceId,
-    username,
-    passwordHash: hash,
-    passwordSalt: salt,
-    role,
-    permissions: role === 'buyer' ? BUYER_PERMISSIONS : OWNER_PERMISSIONS,
-    isActive: true,
-    createdAt: Date.now(),
-  };
-
-  await createData('users', user.id, user);
-  // ✅ إنشاء فهرس اليوزر
-  await setData('usernames', username.toLowerCase(), {
-    userId: user.id,
-    workspaceId,
-  });
-  return user;
+  // تطبيق Firebase ثانوي يمنع تسجيل خروج المالك عند إنشاء الحساب الجديد.
+  const secondaryApp = initializeApp(firebaseConfig, `provision-${uid()}`);
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const credential = await createUserWithEmailAndPassword(secondaryAuth, await usernameEmail(normalized), password);
+    const user: User = {
+      id: credential.user.uid, workspaceId, username: normalized, role,
+      permissions: role === 'buyer' ? BUYER_PERMISSIONS : OWNER_PERMISSIONS,
+      isActive: true, createdAt: Date.now(),
+    };
+    try {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', user.id), { ...user, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      batch.set(doc(db, 'usernames', normalized), { userId: user.id, workspaceId, createdAt: serverTimestamp() });
+      await batch.commit();
+      return user;
+    } catch (error) {
+      await deleteUser(credential.user).catch(() => undefined);
+      throw error;
+    }
+  } finally {
+    await signOut(secondaryAuth).catch(() => undefined);
+    await deleteApp(secondaryApp).catch(() => undefined);
+  }
 }

@@ -22,6 +22,8 @@ import {
   OrderLog,
   PAYMENT_TYPE,
 } from '../model/Order';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase/firebase';
 import { uid } from './authRepository';
 
 /** إنشاء طلب جديد — الحالة «جديد» */
@@ -95,8 +97,6 @@ export async function updateSegmentStatus(
   paidActualAmount: number,
   userId: string,
 ) {
-  const order = await getData<Order>('orders', orderId);
-  if (!order) throw new Error('الطلب غير موجود');
   if (!Number.isFinite(paidActualAmount) || paidActualAmount < 0) {
     throw new Error('المبلغ المدفوع غير صالح');
   }
@@ -104,25 +104,30 @@ export async function updateSegmentStatus(
     throw new Error('أدخل مبلغًا مدفوعًا صحيحًا للمحل');
   }
 
-  const segments = order.segments.map((seg) =>
-    seg.shopId === shopId
-      ? { ...seg, status, paidActualAmount: status === 'purchased' ? paidActualAmount : seg.paidActualAmount }
-      : seg,
-  );
-
-  const updated: Order = { ...order, segments, updatedBy: userId, updatedAt: Date.now() };
-  const newStatus = deriveOrderStatus(updated);
-  updated.status = newStatus;
-
-  await updateData('orders', orderId, {
-    segments: updated.segments,
-    status: newStatus,
-    updatedAt: Date.now(),
-    updatedBy: userId,
+  return runTransaction(db, async (transaction) => {
+    const orderRef = doc(db, 'orders', orderId);
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists()) throw new Error('الطلب غير موجود');
+    const order = { ...snapshot.data(), id: snapshot.id } as Order;
+    if (!order.segments.some((segment) => segment.shopId === shopId)) {
+      throw new Error('المحل غير موجود في الطلب');
+    }
+    const segments = order.segments.map((segment) => segment.shopId === shopId
+      ? { ...segment, status, paidActualAmount: status === SEGMENT_STATUS.PURCHASED ? paidActualAmount : segment.paidActualAmount }
+      : segment);
+    const updated = { ...order, segments, updatedBy: userId, updatedAt: Date.now() } as Order;
+    updated.status = deriveOrderStatus(updated);
+    transaction.update(orderRef, {
+      segments, status: updated.status, updatedAt: serverTimestamp(), updatedBy: userId,
+    });
+    const logId = uid();
+    transaction.set(doc(db, 'order_logs', logId), {
+      id: logId, workspaceId: order.workspaceId, orderId, userId,
+      action: 'segment_status', details: `${shopId}: ${status}، المدفوع ${paidActualAmount}`,
+      timestamp: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    return updated;
   });
-
-  await logAction(orderId, userId, 'segment_status', `${shopId}: ${status}، المدفوع ${paidActualAmount}`);
-  return updated;
 }
 
 /** تسجيل دفعة من الزبون (مقدم/تسليم/سداد دين) — القرار 25 */
@@ -134,40 +139,40 @@ export async function recordPayment(
   type: Payment['type'],
   userId: string,
 ) {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('أدخل مبلغًا صحيحًا أكبر من صفر');
-  }
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('أدخل مبلغًا صحيحًا أكبر من صفر');
 
-  // جلب العملة من الطلب بدلاً من hardcode، ومنع إنشاء دفعة لطلب غير موجود.
-  const order = await getData<Order>('orders', orderId);
-  if (!order) throw new Error('الطلب غير موجود');
-  if (order.workspaceId !== workspaceId || order.customerId !== customerId) {
-    throw new Error('بيانات الدفعة لا تطابق الطلب');
-  }
-  const currency = order.currency;
+  return runTransaction(db, async (transaction) => {
+    const orderRef = doc(db, 'orders', orderId);
+    const snapshot = await transaction.get(orderRef);
+    if (!snapshot.exists()) throw new Error('الطلب غير موجود');
+    const order = { ...snapshot.data(), id: snapshot.id } as Order;
+    if (order.workspaceId !== workspaceId || order.customerId !== customerId) {
+      throw new Error('بيانات الدفعة لا تطابق الطلب');
+    }
+    const outstanding = Math.max(0, order.totalAmount - order.paidAmount);
+    if (outstanding === 0) throw new Error('الطلب مدفوع بالكامل');
+    if (amount > outstanding) throw new Error(`المبلغ أكبر من المتبقي (${outstanding} ${order.currency})`);
 
-  const payment: Payment = {
-    id: uid(),
-    orderId,
-    customerId,
-    amount,
-    currency,
-    type,
-    createdAt: Date.now(),
-  };
-  await createData('payments', payment.id, payment);
-
-  // تحديث المدفوع/المتبقي في الطلب.
-  const paidAmount = order.paidAmount + amount;
-  await updateData('orders', orderId, {
-    paidAmount,
-    remainingAmount: Math.max(0, order.totalAmount - paidAmount),
-    updatedAt: Date.now(),
-    updatedBy: userId,
+    const payment: Payment = {
+      id: uid(), orderId, customerId, amount, currency: order.currency,
+      type, createdAt: Date.now(),
+    };
+    const paidAmount = order.paidAmount + amount;
+    transaction.set(doc(db, 'payments', payment.id), {
+      ...payment, workspaceId, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    });
+    transaction.update(orderRef, {
+      paidAmount, remainingAmount: Math.max(0, order.totalAmount - paidAmount),
+      updatedAt: serverTimestamp(), updatedBy: userId,
+    });
+    const logId = uid();
+    transaction.set(doc(db, 'order_logs', logId), {
+      id: logId, workspaceId, orderId, userId, action: 'payment',
+      details: `دفعة ${amount} ${order.currency}`,
+      timestamp: serverTimestamp(), createdAt: serverTimestamp(),
+    });
+    return payment;
   });
-
-  await logAction(orderId, userId, 'payment', `دفعة ${amount} ${currency}`);
-  return payment;
 }
 
 /** تغيير حالة الطلب (المالك) */
@@ -187,15 +192,12 @@ export async function deleteOrder(orderId: string) {
 
 /** سجل الحركات */
 async function logAction(orderId: string, userId: string, action: string, details?: string) {
+  const order = await getData<Order>('orders', orderId);
+  if (!order) throw new Error('الطلب غير موجود عند تسجيل الحركة');
   const log: OrderLog = {
-    id: uid(),
-    orderId,
-    userId,
-    action,
-    details,
-    timestamp: Date.now(),
+    id: uid(), orderId, userId, action, details, timestamp: Date.now(),
   };
-  await createData('order_logs', log.id, log);
+  await createData('order_logs', log.id, { ...log, workspaceId: order.workspaceId });
 }
 
 /* ===== الاستماع المباشر ===== */

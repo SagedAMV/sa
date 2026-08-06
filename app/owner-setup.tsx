@@ -33,8 +33,8 @@ export default function OwnerSetupScreen() {
       Alert.alert('بيانات ناقصة', 'أكمل جميع الحقول');
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('كلمة مرور ضعيفة', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+    if (password.length < 8) {
+      Alert.alert('كلمة مرور ضعيفة', 'كلمة المرور يجب أن تكون 8 أحرف على الأقل');
       return;
     }
     if (password !== confirm) {

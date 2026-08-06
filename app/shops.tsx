@@ -53,6 +53,8 @@ export default function ShopsScreen() {
   }
 
   async function handleDelete(shopId: string, shopName: string) {
+    if (!user) return;
+    const workspaceId = user.workspaceId;
     Alert.alert('حذف محل', `حذف «${shopName}»؟ ستُحذف أصنافه.`, [
       { text: 'إلغاء', style: 'cancel' },
       {
@@ -60,7 +62,7 @@ export default function ShopsScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteShop(shopId);
+            await deleteShop(shopId, workspaceId);
             Alert.alert('تم', `تم حذف «${shopName}»`);
           } catch (e: any) {
             Alert.alert('خطأ', e.message || 'تعذر حذف المحل');

@@ -112,7 +112,7 @@ export default function UsersScreen() {
       {showAdd ? (
         <View style={styles.form}>
           <TextInput style={styles.input} placeholder="اسم المستخدم" value={username} onChangeText={setUsername} autoCapitalize="none" />
-          <TextInput style={styles.input} placeholder="كلمة المرور (6 أحرف+)" value={password} onChangeText={setPassword} secureTextEntry />
+          <TextInput style={styles.input} placeholder="كلمة المرور (8 أحرف+)" value={password} onChangeText={setPassword} secureTextEntry />
           <Pressable
             style={[styles.permRow, deliveryPerm && styles.permRowActive]}
             onPress={() => setDeliveryPerm(!deliveryPerm)}

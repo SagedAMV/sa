@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && me().isActive == true; }
+    function sameWorkspace(data) { return active() && data.workspaceId == me().workspaceId; }
+    function owner() { return active() && me().role == 'owner'; }
+    function allowed(permission) { return active() && me().permissions[permission] == true; }
+
+    match /users/{uid} {
+      allow create: if signedIn() && (
+        (uid == request.auth.uid && request.resource.data.role == 'owner') ||
+        (owner() && request.resource.data.workspaceId == me().workspaceId)
+      );
+      allow read: if active() && (uid == request.auth.uid || (owner() && resource.data.workspaceId == me().workspaceId));
+      allow update: if owner() && resource.data.workspaceId == me().workspaceId
+        && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if false;
+    }
+
+    match /workspaces/{id} {
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow read: if sameWorkspace(resource.data);
+      allow update: if owner() && resource.data.id == me().workspaceId;
+      allow delete: if false;
+    }
+
+    match /usernames/{name} {
+      allow read: if false;
+      allow create: if signedIn() && request.resource.data.userId is string
+        && (request.resource.data.userId == request.auth.uid || owner());
+      allow update, delete: if false;
+    }
+
+    match /orders/{id} {
+      allow read: if sameWorkspace(resource.data) && allowed('orders.view');
+      allow create: if sameWorkspace(request.resource.data) && allowed('orders.add');
+      allow update: if sameWorkspace(resource.data) &&
+        (allowed('orders.edit') || allowed('orders.changeStatus') || allowed('purchase.confirm') || allowed('delivery.confirm'))
+        && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if sameWorkspace(resource.data) && allowed('orders.delete');
+    }
+
+    match /customers/{id} {
+      allow read: if sameWorkspace(resource.data) && allowed('customers.view');
+      allow create: if sameWorkspace(request.resource.data) && allowed('customers.add');
+      allow update: if sameWorkspace(resource.data) && (allowed('customers.edit') || allowed('customers.manageDebts'));
+      allow delete: if sameWorkspace(resource.data) && allowed('customers.delete');
+    }
+    match /shops/{id} {
+      allow read: if sameWorkspace(resource.data) && allowed('shops.view');
+      allow create: if sameWorkspace(request.resource.data) && allowed('shops.add');
+      allow update: if sameWorkspace(resource.data) && (allowed('shops.edit') || allowed('shops.items.edit'));
+      allow delete: if sameWorkspace(resource.data) && allowed('shops.delete');
+    }
+    match /products/{id} {
+      allow read: if sameWorkspace(resource.data) && allowed('shops.view');
+      allow create, update: if sameWorkspace(request.resource.data) && allowed('shops.items.edit');
+      allow delete: if sameWorkspace(resource.data) && allowed('shops.items.edit');
+    }
+    match /payments/{id} {
+      allow read: if sameWorkspace(resource.data) && (allowed('customers.manageDebts') || allowed('finance.viewDebts'));
+      allow create: if sameWorkspace(request.resource.data) && (allowed('customers.manageDebts') || allowed('delivery.confirm'));
+      allow update, delete: if false;
+    }
+    match /order_logs/{id} {
+      allow read: if sameWorkspace(resource.data) && allowed('admin.logs');
+      allow create: if sameWorkspace(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

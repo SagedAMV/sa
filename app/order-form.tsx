@@ -128,7 +128,7 @@ export default function OrderFormScreen() {
         for (const it of seg.items) {
           let imageUrl = it.imageUrl;
           if (it.localUri) {
-            imageUrl = await uploadImage(it.localUri, 'orders');
+            imageUrl = await uploadImage(it.localUri, user.workspaceId, 'orders');
           }
           items.push({ ...it, imageUrl });
         }

@@ -4,10 +4,11 @@
  */
 
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAppStore } from '../src/state/useAppStore';
-import { getSession } from '../src/data/repository/authRepository';
+import { clearSession, getSession, periodicSecurityCheck } from '../src/data/repository/authRepository';
 import { listenCustomers, listenShops } from '../src/data/repository/customerRepository';
 import { listenProducts } from '../src/data/repository/productRepository';
 import { listenOrders } from '../src/data/repository/orderRepository';
@@ -69,6 +70,32 @@ export default function RootLayout() {
       isMounted = false;
     };
   }, [setSessionReady, setUser]);
+
+  // أعد التحقق من تعطيل الحساب والصلاحيات عند العودة للتطبيق، ودوريًا أثناء فتحه.
+  useEffect(() => {
+    if (!user) return;
+    let checking = false;
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        setUser(await periodicSecurityCheck(user));
+      } catch {
+        await clearSession();
+        setUser(null);
+      } finally {
+        checking = false;
+      }
+    };
+    const interval = setInterval(() => void check(), 5 * 60 * 1000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void check();
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [setUser, user?.id]);
 
   // تحميل البيانات الحية عند وجود مستخدم ومساحة عمل، ومسح بيانات المستخدم السابق
   // فور تسجيل الخروج أو تبديل مساحة العمل.

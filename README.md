@@ -42,15 +42,22 @@ npm run build:android
 
 ## Firebase
 
-يستخدم المشروع **Firebase JavaScript SDK** لـ Firestore وStorage:
+يستخدم المشروع **Firebase JavaScript SDK** للمصادقة وFirestore وStorage:
 
 - إعداد Firebase موجود في: `src/data/firebase/firebase.ts`
+- فعّل **Authentication > Email/Password** وCloud Firestore وFirebase Storage.
+- تسجيل الدخول الحقيقي يتم عبر Firebase Auth؛ لا تُحفظ كلمات المرور أو تجزئاتها في Firestore أو SecureStore.
 - لا يعتمد التطبيق على `google-services.json` أو إضافة Google Services Gradle.
-- فعّل **Cloud Firestore** و**Firebase Storage** في مشروع Firebase المطابق للإعدادات.
-- إذا أردت ربط مشروع Firebase آخر، استبدل قيم إعداد تطبيق الويب من Firebase Console في `firebase.ts`.
-- تُرفع الصور على Android وiOS عبر مسار base64 الموثق من Firebase لبيئة React Native/Expo، وعلى الويب عبر Blob.
+- إذا أردت ربط مشروع Firebase آخر، استبدل قيم إعداد تطبيق الويب في `firebase.ts`.
+- تُعزل الصور تحت مسار مساحة العمل، وتُرفع على الهاتف عبر base64 وعلى الويب عبر Blob.
 
-> إعداد Firebase الظاهر في تطبيق العميل ليس سرًا بحد ذاته. الحماية الفعلية يجب أن تكون عبر **Firestore Security Rules** و**Storage Rules** المناسبة لمساحة العمل والمستخدم. لا تُطلق التطبيق بقواعد تسمح بالقراءة أو الكتابة العامة.
+انشر قواعد الحماية المرفقة قبل تشغيل التطبيق على بيانات حقيقية:
+
+```bash
+npx firebase-tools deploy --only firestore:rules,storage
+```
+
+> إعداد Firebase في تطبيق العميل ليس سرًا. الحماية الفعلية في `firestore.rules` و`storage.rules`. الحسابات التي أنشأتها نسخة قديمة بنظام التجزئة المحلي تحتاج إلى إعادة إنشائها في Firebase Auth؛ لا يوجد fallback غير آمن لكلمات المرور القديمة.
 
 ---
 

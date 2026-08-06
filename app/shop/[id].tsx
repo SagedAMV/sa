@@ -64,7 +64,7 @@ export default function ShopDetailScreen() {
 
     setSaving(true);
     try {
-      const imageUrl = await uploadImage(imageUri, 'products');
+      const imageUrl = await uploadImage(imageUri, user.workspaceId, 'products');
       await addProduct(user.workspaceId, {
         shopId,
         name: name.trim() || undefined,

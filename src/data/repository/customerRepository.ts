@@ -83,9 +83,9 @@ export async function updateShop(id: string, patch: Partial<Shop>) {
 }
 
 /** حذف المحل مع أصنافه حتى لا تبقى منتجات يتيمة في مساحة العمل. */
-export async function deleteShop(id: string) {
+export async function deleteShop(id: string, workspaceId: string) {
   const productSnapshot = await getDocs(
-    query(collection(db, 'products'), where('shopId', '==', id)),
+    query(collection(db, 'products'), where('workspaceId', '==', workspaceId), where('shopId', '==', id)),
   );
   const batch = writeBatch(db);
   batch.delete(doc(db, 'shops', id));

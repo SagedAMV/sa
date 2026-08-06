@@ -117,8 +117,8 @@ export interface User {
   id: string;
   workspaceId: string;
   username: string;
-  passwordHash: string;
-  /** Salt فريد لكل مستخدم — يُضمّن عند تجزئة كلمة المرور. */
+  /** حقول قديمة فقط لترحيل الحسابات السابقة؛ الحسابات الجديدة تستخدم Firebase Auth. */
+  passwordHash?: string;
   passwordSalt?: string;
   role: UserRole;
   permissions: Permissions;
