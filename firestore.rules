@@ -9,8 +9,19 @@ service cloud.firestore {
     function allowed(permission) { return active() && me().permissions[permission] == true; }
 
     match /users/{uid} {
+      // إنشاء الحساب الذاتي (مالك جديد) مسموح فقط لمساحة عمل جديدة تمامًا
+      // أو مساحة عمل يملكها نفس المستخدم فعلًا — وإلا استطاع أي حساب مسجّل
+      // الانضمام إلى مساحة عمل قائمة بصلاحية «مالك» إذا عرف معرفها.
       allow create: if signedIn() && (
-        (uid == request.auth.uid && request.resource.data.role == 'owner') ||
+        (
+          uid == request.auth.uid
+          && request.resource.data.id == uid
+          && request.resource.data.role == 'owner'
+          && (
+            !exists(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId))
+            || get(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)).data.ownerId == request.auth.uid
+          )
+        ) ||
         (owner() && request.resource.data.workspaceId == me().workspaceId)
       );
       allow read: if active() && (uid == request.auth.uid || (owner() && resource.data.workspaceId == me().workspaceId));
@@ -61,7 +72,14 @@ service cloud.firestore {
     }
     match /payments/{id} {
       allow read: if sameWorkspace(resource.data) && (allowed('customers.manageDebts') || allowed('finance.viewDebts'));
-      allow create: if sameWorkspace(request.resource.data) && (allowed('customers.manageDebts') || allowed('delivery.confirm'));
+      // تحقق من الشكل مطابق لتحقق recordPayment في التطبيق، ويمنع حقن دفعات ملوثة من خارج التطبيق.
+      allow create: if sameWorkspace(request.resource.data)
+        && (allowed('customers.manageDebts') || allowed('delivery.confirm'))
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.type in ['advance', 'delivery', 'debt']
+        && request.resource.data.orderId is string
+        && request.resource.data.customerId is string;
       allow update, delete: if false;
     }
     match /order_logs/{id} {
