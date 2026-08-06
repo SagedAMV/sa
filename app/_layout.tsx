@@ -4,7 +4,7 @@
  */
 
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAppStore } from '../src/state/useAppStore';
 import { getSession } from '../src/data/repository/authRepository';
@@ -12,24 +12,71 @@ import { listenCustomers, listenShops } from '../src/data/repository/customerRep
 import { listenProducts } from '../src/data/repository/productRepository';
 import { listenOrders } from '../src/data/repository/orderRepository';
 
+/** يمنع فتح شاشات البيانات من رابط مباشر قبل وجود جلسة جاهزة. */
+function SessionNavigationGuard() {
+  const router = useRouter();
+  const segments = useSegments();
+  const user = useAppStore((s) => s.user);
+  const isSessionReady = useAppStore((s) => s.isSessionReady);
+  const currentRoute = segments[0] || 'index';
+  const isPublicRoute = currentRoute === 'index' || currentRoute === 'login' || currentRoute === 'owner-setup';
+
+  useEffect(() => {
+    if (!isSessionReady) return;
+
+    if (!user && !isPublicRoute) {
+      router.replace('/login');
+      return;
+    }
+
+    if (user && (currentRoute === 'login' || currentRoute === 'owner-setup')) {
+      router.replace(user.role === 'owner' ? '/dashboard' : '/buyer-shops');
+    }
+  }, [currentRoute, isPublicRoute, isSessionReady, router, user?.id, user?.role]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const setUser = useAppStore((s) => s.setUser);
+  const setSessionReady = useAppStore((s) => s.setSessionReady);
   const user = useAppStore((s) => s.user);
   const setCustomers = useAppStore((s) => s.setCustomers);
   const setShops = useAppStore((s) => s.setShops);
   const setProducts = useAppStore((s) => s.setProducts);
   const setOrders = useAppStore((s) => s.setOrders);
+  const clearWorkspaceData = useAppStore((s) => s.clearWorkspaceData);
 
-  // استرجاع الجلسة المحفوظة (يفتح دون إنترنت — القرار 8)
+  // لا نوجّه المستخدم قبل اكتمال قراءة SecureStore؛ هذا يمنع إرساله مؤقتًا
+  // إلى شاشة الدخول رغم وجود جلسة محفوظة.
   useEffect(() => {
-    getSession().then((u) => {
-      if (u) setUser(u);
-    });
-  }, []);
+    let isMounted = true;
 
-  // تحميل البيانات الحية عند وجود مستخدم ومساحة عمل
+    async function restoreSession() {
+      try {
+        const savedUser = await getSession();
+        if (isMounted && savedUser) setUser(savedUser);
+      } catch {
+        // يتعامل getSession مع البيانات التالفة، وهذه حماية إضافية لخطأ التخزين نفسه.
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setSessionReady(true);
+      }
+    }
+
+    void restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [setSessionReady, setUser]);
+
+  // تحميل البيانات الحية عند وجود مستخدم ومساحة عمل، ومسح بيانات المستخدم السابق
+  // فور تسجيل الخروج أو تبديل مساحة العمل.
   useEffect(() => {
-    if (!user) return;
+    if (!user?.workspaceId) {
+      clearWorkspaceData();
+      return;
+    }
 
     const unsubCustomers = listenCustomers(user.workspaceId, setCustomers);
     const unsubShops = listenShops(user.workspaceId, setShops);
@@ -42,7 +89,7 @@ export default function RootLayout() {
       unsubProducts();
       unsubOrders();
     };
-  }, [user?.id]);
+  }, [clearWorkspaceData, setCustomers, setOrders, setProducts, setShops, user?.id, user?.workspaceId]);
 
   return (
     <>
@@ -66,6 +113,7 @@ export default function RootLayout() {
         <Stack.Screen name="users" />
         <Stack.Screen name="templates" />
       </Stack>
+      <SessionNavigationGuard />
     </>
   );
 }

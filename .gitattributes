@@ -1,0 +1,2 @@
+# Expo regenerates the Windows Gradle wrapper with CRLF line endings.
+android/gradlew.bat text eol=crlf

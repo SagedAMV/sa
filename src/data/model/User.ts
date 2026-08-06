@@ -118,7 +118,7 @@ export interface User {
   workspaceId: string;
   username: string;
   passwordHash: string;
-  /** Salt فريد لكل مستخدم — يُستخدم مع PBKDF2 لمنع Rainbow Table */
+  /** Salt فريد لكل مستخدم — يُضمّن عند تجزئة كلمة المرور. */
   passwordSalt?: string;
   role: UserRole;
   permissions: Permissions;

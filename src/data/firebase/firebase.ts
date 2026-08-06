@@ -5,7 +5,8 @@
  * ✅ تم التحويل من @react-native-firebase إلى firebase JS SDK
  */
 
-import { initializeApp } from 'firebase/app';
+import './polyfills';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -20,8 +21,9 @@ const firebaseConfig = {
   measurementId: "G-D64LC286CR",
 };
 
-// تهيئة Firebase
-const app = initializeApp(firebaseConfig);
+// نعيد استخدام التطبيق الموجود أثناء Fast Refresh بدلاً من محاولة تهيئته مرتين.
+// هذا هو نمط Firebase الموصى به للتطبيقات التي قد تعيد تقييم الوحدة.
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // قاعدة البيانات (Firestore)
 export const db = getFirestore(app);

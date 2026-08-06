@@ -26,8 +26,9 @@ function generateSalt(): string {
 }
 
 /**
- * تشفير كلمة المرور مع salt (PBKDF2-style)
- * ✅ أقوى من SHA-256 العادي — يمنع Rainbow Table attacks
+ * تجزئة كلمة المرور مع salt فريد.
+ * ملاحظة: المصادقة الإنتاجية ينبغي أن تُنفّذ عبر Firebase Auth أو خدمة خلفية؛
+ * لا ينبغي اعتبار تجزئة تعمل على العميل بديلاً عن مصادقة خادمية.
  */
 export async function hashPassword(password: string, existingSalt?: string): Promise<{ hash: string; salt: string }> {
   const salt = existingSalt || generateSalt();
@@ -53,10 +54,39 @@ export async function saveSession(user: User) {
   await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(user));
 }
 
-/** قراءة الجلسة المحفوظة */
+/** التحقق من الحد الأدنى لبنية الجلسة قبل استخدامها في الواجهة. */
+function isStoredUser(value: unknown): value is User {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<User>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.workspaceId === 'string' &&
+    typeof candidate.username === 'string' &&
+    (candidate.role === 'owner' || candidate.role === 'buyer') &&
+    typeof candidate.isActive === 'boolean' &&
+    !!candidate.permissions &&
+    typeof candidate.permissions === 'object'
+  );
+}
+
+/** قراءة الجلسة المحفوظة مع معالجة بيانات SecureStore التالفة. */
 export async function getSession(): Promise<User | null> {
   const raw = await SecureStore.getItemAsync(SESSION_KEY);
-  return raw ? (JSON.parse(raw) as User) : null;
+  if (!raw) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isStoredUser(parsed)) return parsed;
+  } catch {
+    // تُمسح القيمة التالفة أدناه ثم يظهر تسجيل الدخول بدل انهيار التطبيق.
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(SESSION_KEY);
+  } catch {
+    // لا نسمح لفشل التنظيف نفسه أن يمنع فتح شاشة الدخول.
+  }
+  return null;
 }
 
 /** مسح الجلسة (تسجيل خروج) */
@@ -122,7 +152,7 @@ export async function login(username: string, password: string): Promise<User> {
   if (!found) throw new Error('مستخدم غير موجود');
 
   // 3. التحقق من كلمة المرور
-  const isValid = await verifyPassword(password, found.passwordHash, (found as any).passwordSalt || '');
+  const isValid = await verifyPassword(password, found.passwordHash, found.passwordSalt || '');
   if (!isValid) throw new Error('كلمة المرور غير صحيحة');
   if (!found.isActive) throw new Error('الحساب معطّل');
 

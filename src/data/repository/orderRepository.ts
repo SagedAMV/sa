@@ -77,7 +77,9 @@ export function deriveOrderStatus(order: Order): Order['status'] {
     return order.status === ORDER_STATUS.PURCHASING ? order.status : ORDER_STATUS.PURCHASING;
   }
   if (allPurchased) {
-    return order.status === ORDER_STATUS.PURCHASING ? ORDER_STATUS.PURCHASED : order.status;
+    // قد يبدأ المشتري العمل على طلب «جديد»، لذلك لا نعتمد على تغيير يدوي سابق
+    // للحالة كي يصل الطلب إلى «تم الشراء» بعد اكتمال كل الشرائح.
+    return ORDER_STATUS.PURCHASED;
   }
   if (nonePurchased && order.status === ORDER_STATUS.NEW) {
     return order.status;
@@ -95,6 +97,12 @@ export async function updateSegmentStatus(
 ) {
   const order = await getData<Order>('orders', orderId);
   if (!order) throw new Error('الطلب غير موجود');
+  if (!Number.isFinite(paidActualAmount) || paidActualAmount < 0) {
+    throw new Error('المبلغ المدفوع غير صالح');
+  }
+  if (status === SEGMENT_STATUS.PURCHASED && paidActualAmount <= 0) {
+    throw new Error('أدخل مبلغًا مدفوعًا صحيحًا للمحل');
+  }
 
   const segments = order.segments.map((seg) =>
     seg.shopId === shopId
@@ -126,9 +134,17 @@ export async function recordPayment(
   type: Payment['type'],
   userId: string,
 ) {
-  // ✅ جلب العملة من الطلب بدلاً من hardcode
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('أدخل مبلغًا صحيحًا أكبر من صفر');
+  }
+
+  // جلب العملة من الطلب بدلاً من hardcode، ومنع إنشاء دفعة لطلب غير موجود.
   const order = await getData<Order>('orders', orderId);
-  const currency = order?.currency || 'YER';
+  if (!order) throw new Error('الطلب غير موجود');
+  if (order.workspaceId !== workspaceId || order.customerId !== customerId) {
+    throw new Error('بيانات الدفعة لا تطابق الطلب');
+  }
+  const currency = order.currency;
 
   const payment: Payment = {
     id: uid(),
@@ -141,16 +157,14 @@ export async function recordPayment(
   };
   await createData('payments', payment.id, payment);
 
-  // تحديث المدفوع/المتبقي في الطلب
-  if (order) {
-    const paidAmount = order.paidAmount + amount;
-    await updateData('orders', orderId, {
-      paidAmount,
-      remainingAmount: Math.max(0, order.totalAmount - paidAmount),
-      updatedAt: Date.now(),
-      updatedBy: userId,
-    });
-  }
+  // تحديث المدفوع/المتبقي في الطلب.
+  const paidAmount = order.paidAmount + amount;
+  await updateData('orders', orderId, {
+    paidAmount,
+    remainingAmount: Math.max(0, order.totalAmount - paidAmount),
+    updatedAt: Date.now(),
+    updatedBy: userId,
+  });
 
   await logAction(orderId, userId, 'payment', `دفعة ${amount} ${currency}`);
   return payment;

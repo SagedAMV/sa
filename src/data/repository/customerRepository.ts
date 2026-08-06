@@ -10,6 +10,8 @@ import {
   listByWorkspace,
   listenCollection,
 } from '../firebase/firestore';
+import { db } from '../firebase/firebase';
+import { collection, doc, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { Customer, Shop } from '../model/Customer';
 import { uid } from './authRepository';
 
@@ -80,8 +82,15 @@ export async function updateShop(id: string, patch: Partial<Shop>) {
   await updateData('shops', id, patch);
 }
 
+/** حذف المحل مع أصنافه حتى لا تبقى منتجات يتيمة في مساحة العمل. */
 export async function deleteShop(id: string) {
-  await deleteData('shops', id);
+  const productSnapshot = await getDocs(
+    query(collection(db, 'products'), where('shopId', '==', id)),
+  );
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'shops', id));
+  productSnapshot.docs.forEach((product) => batch.delete(product.ref));
+  await batch.commit();
 }
 
 export async function listShops(workspaceId: string): Promise<Shop[]> {

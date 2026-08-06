@@ -46,7 +46,7 @@ export default function BuyerShopOrdersScreen() {
     const key = `${order.id}_${shopId}`;
     const amount = status === 'purchased' ? Number(paidAmount[key] || 0) : 0;
 
-    if (status === 'purchased' && amount <= 0) {
+    if (status === 'purchased' && (!Number.isFinite(amount) || amount <= 0)) {
       Alert.alert('تنبيه', 'أدخل المبلغ المدفوع فعليًا للمحل');
       return;
     }

@@ -66,6 +66,22 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
+      {/* لا تجعل شاشة الطلب هي الطريق الوحيد لإدارة الزبائن والمحلات. */}
+      <View style={styles.managementRow}>
+        <Pressable style={styles.managementBtn} onPress={() => router.push('/customers')}>
+          <Text style={styles.managementIcon}>👥</Text>
+          <Text style={styles.managementText}>الزبائن</Text>
+        </Pressable>
+        <Pressable style={styles.managementBtn} onPress={() => router.push('/shops')}>
+          <Text style={styles.managementIcon}>🏪</Text>
+          <Text style={styles.managementText}>المحلات</Text>
+        </Pressable>
+        <Pressable style={styles.managementBtn} onPress={() => router.push('/settings')}>
+          <Text style={styles.managementIcon}>⚙️</Text>
+          <Text style={styles.managementText}>الإعدادات</Text>
+        </Pressable>
+      </View>
+
       {/* أحدث الطلبات */}
       <Text style={styles.sectionTitle}>أحدث الطلبات</Text>
       {recentOrders.length === 0 ? (
@@ -111,6 +127,10 @@ const styles = StyleSheet.create({
   quickBtn: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   quickIcon: { fontSize: 26 },
   quickText: { fontSize: 13, color: '#334155', marginTop: 6, fontWeight: '600' },
+  managementRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  managementBtn: { flex: 1, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' },
+  managementIcon: { fontSize: 20 },
+  managementText: { fontSize: 12, color: '#1D4ED8', marginTop: 4, fontWeight: '700' },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 12, marginTop: 8 },
   emptyBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   emptyText: { color: '#64748B', fontSize: 14 },

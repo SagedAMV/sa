@@ -59,33 +59,37 @@ export default function OrderFormScreen() {
 
   /** اختيار صورة وإضافتها كصنف داخل شريحة */
   async function pickImageForSegment(shopId: string) {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.6,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setSegments((prev) =>
-        prev.map((seg) =>
-          seg.shopId === shopId
-            ? {
-                ...seg,
-                items: [
-                  ...seg.items,
-                  {
-                    productId: `new_${Date.now()}`,
-                    imageUrl: '',
-                    localUri: asset.uri,
-                    name: '',
-                    quantity: 1,
-                    price: 0,
-                    currency: 'YER',
-                  },
-                ],
-              }
-            : seg,
-        ),
-      );
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.6,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setSegments((prev) =>
+          prev.map((seg) =>
+            seg.shopId === shopId
+              ? {
+                  ...seg,
+                  items: [
+                    ...seg.items,
+                    {
+                      productId: `new_${Date.now()}`,
+                      imageUrl: '',
+                      localUri: asset.uri,
+                      name: '',
+                      quantity: 1,
+                      price: 0,
+                      currency: 'YER',
+                    },
+                  ],
+                }
+              : seg,
+          ),
+        );
+      }
+    } catch (e: any) {
+      Alert.alert('تعذر اختيار الصورة', e.message || 'تحقق من إذن الوصول إلى الصور');
     }
   }
 

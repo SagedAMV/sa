@@ -19,7 +19,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppStore } from '../../src/state/useAppStore';
 import { recordPayment, changeOrderStatus, deleteOrder } from '../../src/data/repository/orderRepository';
-import { ORDER_STATUS, SEGMENT_STATUS, Order } from '../../src/data/model/Order';
+import { ORDER_STATUS, SEGMENT_STATUS, Order, OrderStatus } from '../../src/data/model/Order';
 import { ORDER_STATUS_LABELS, SEGMENT_STATUS_LABELS } from '../../src/utils/constants';
 
 export default function OrderDetailScreen() {
@@ -62,11 +62,11 @@ export default function OrderDetailScreen() {
     }
   }
 
-  async function handleStatus(next: string) {
+  async function handleStatus(next: OrderStatus) {
     if (!user) return;
     setBusy(true);
     try {
-      await changeOrderStatus(currentOrder.id, next as any, user.id);
+      await changeOrderStatus(currentOrder.id, next, user.id);
     } catch (e: any) {
       Alert.alert('خطأ', e.message);
     } finally {

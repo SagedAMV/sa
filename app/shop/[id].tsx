@@ -37,17 +37,32 @@ export default function ShopDetailScreen() {
   const [size, setSize] = useState('');
   const [color, setColor] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function pickImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
-    if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+      if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
+    } catch (e: any) {
+      Alert.alert('تعذر اختيار الصورة', e.message || 'تحقق من إذن الوصول إلى الصور');
+    }
   }
 
   async function handleAdd() {
-    if (!user || !imageUri) {
+    if (!user) {
+      Alert.alert('تعذر الحفظ', 'سجّل الدخول أولًا');
+      return;
+    }
+    if (!shop) {
+      Alert.alert('تعذر الحفظ', 'المحل غير موجود');
+      return;
+    }
+    if (!imageUri) {
       Alert.alert('تنبيه', 'الصورة أساسية — اختر صورة الصنف');
       return;
     }
+
+    setSaving(true);
     try {
       const imageUrl = await uploadImage(imageUri, 'products');
       await addProduct(user.workspaceId, {
@@ -64,7 +79,9 @@ export default function ShopDetailScreen() {
       setShowAdd(false);
       setName(''); setBuyPrice(''); setSellPrice(''); setSize(''); setColor(''); setImageUri(null);
     } catch (e: any) {
-      Alert.alert('خطأ', e.message);
+      Alert.alert('خطأ', e.message || 'تعذر حفظ الصنف');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -95,8 +112,8 @@ export default function ShopDetailScreen() {
             <TextInput style={[styles.input, styles.flex1]} placeholder="مقاس (اختياري)" value={size} onChangeText={setSize} />
             <TextInput style={[styles.input, styles.flex1]} placeholder="لون (اختياري)" value={color} onChangeText={setColor} />
           </View>
-          <Pressable style={styles.saveBtn} onPress={handleAdd}>
-            <Text style={styles.saveText}>حفظ الصنف</Text>
+          <Pressable style={[styles.saveBtn, saving && styles.disabled]} onPress={handleAdd} disabled={saving}>
+            <Text style={styles.saveText}>{saving ? 'جارٍ الحفظ…' : 'حفظ الصنف'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -135,6 +152,7 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   saveBtn: { backgroundColor: '#10B981', borderRadius: 10, padding: 12, alignItems: 'center' },
   saveText: { color: '#FFFFFF', fontWeight: '700' },
+  disabled: { opacity: 0.6 },
   productCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   productImage: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#F1F5F9' },
   productInfo: { flex: 1, marginLeft: 12 },

@@ -30,7 +30,12 @@ export default function DeliveryScreen() {
 
   async function handleDeliver(orderId: string) {
     if (!user || !hasPerm('delivery.confirm')) return;
-    const amount = Number(amounts[orderId] || 0);
+    const enteredAmount = amounts[orderId]?.trim() || '';
+    const amount = Number(enteredAmount || 0);
+    if (enteredAmount && (!Number.isFinite(amount) || amount <= 0)) {
+      Alert.alert('تنبيه', 'أدخل مبلغًا صحيحًا أو اترك الحقل فارغًا');
+      return;
+    }
     setBusyId(orderId);
     try {
       // تسجيل الدفعة عند التسليم إن وُجدت

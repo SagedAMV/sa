@@ -15,11 +15,11 @@ export default function ReportsScreen() {
     const delivered = orders.filter((o) => o.status === 'delivered');
     const totalSales = delivered.reduce((s, o) => s + o.totalAmount, 0);
     const totalPaid = delivered.reduce((s, o) => s + o.paidAmount, 0);
-    // الربح التقريبي: البيع - الشراء (بنفس العملة فقط)
+    // الربح التقريبي: قيمة البيع في الطلب ناقص ما سُجّل مدفوعًا فعليًا للمحلات.
     const totalProfit = delivered.reduce((s, o) => {
       const sell = o.totalAmount;
       const buy = o.segments.reduce(
-        (ss, seg) => ss + seg.items.reduce((sss, it) => sss + it.price * it.quantity, 0),
+        (sum, seg) => sum + (Number.isFinite(seg.paidActualAmount) ? seg.paidActualAmount : 0),
         0,
       );
       return s + (sell - buy);

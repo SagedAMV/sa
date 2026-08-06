@@ -33,6 +33,10 @@ export default function OwnerSetupScreen() {
       Alert.alert('بيانات ناقصة', 'أكمل جميع الحقول');
       return;
     }
+    if (password.length < 6) {
+      Alert.alert('كلمة مرور ضعيفة', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
     if (password !== confirm) {
       Alert.alert('خطأ', 'كلمتا المرور غير متطابقتين');
       return;

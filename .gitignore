@@ -11,9 +11,12 @@ web-build/
 
 # Android
 android/.gradle/
+android/.kotlin/
 android/build/
 android/app/build/
 android/local.properties
+android/app/google-services.json
+google-services.json
 .gradle/
 *.keystore
 *.jks

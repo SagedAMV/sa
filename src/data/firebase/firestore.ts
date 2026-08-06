@@ -19,9 +19,35 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 
-/** تحويل Timestamp إلى رقم (وقت ميللي) */
-export function toMillis(t: any): number {
-  return t && typeof t.toMillis === 'function' ? t.toMillis() : (t as number);
+/** تحويل قيمة التاريخ القادمة من Firestore إلى رقم milliseconds آمن للواجهات. */
+export function toMillis(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toMillis' in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === 'function'
+  ) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return 0;
+}
+
+const TIME_FIELDS = ['createdAt', 'updatedAt', 'timestamp'] as const;
+
+/**
+ * Firestore يعيد Timestamp بينما نماذج التطبيق تستخدم milliseconds.
+ * نوحّد الشكل هنا مرة واحدة كي لا تتعطل الشاشات التي تستخدم Date أو الترتيب الزمني.
+ */
+function normalizeDocument<T>(id: string, data: Record<string, unknown>): T {
+  const normalized: Record<string, unknown> = { ...data, id };
+  for (const field of TIME_FIELDS) {
+    if (normalized[field] !== undefined && normalized[field] !== null) {
+      normalized[field] = toMillis(normalized[field]);
+    }
+  }
+  return normalized as T;
 }
 
 /** حقل updatedAt للكتابة */
@@ -69,8 +95,8 @@ export async function deleteData(coll: string, id: string) {
 /** قراءة واحدة */
 export async function getData<T>(coll: string, id: string): Promise<T | null> {
   const snap = await getDoc(doc(db, coll, id));
-  // exists() في Firebase JS SDK هي دالة
-  return snap.exists() ? (snap.data() as T) : null;
+  // exists() في Firebase JS SDK هي دالة.
+  return snap.exists() ? normalizeDocument<T>(snap.id, snap.data()) : null;
 }
 
 /** قراءة مجموعة حسب مساحة العمل */
@@ -84,7 +110,7 @@ export async function listByWorkspace<T>(
     orderBy('createdAt', 'desc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
+  return snap.docs.map((d) => normalizeDocument<T>(d.id, d.data()));
 }
 
 /** استماع مباشر (Live) — للتحديث الفوري بين الأجهزة */
@@ -99,7 +125,7 @@ export function listenCollection<T>(
   );
   return onSnapshot(q, {
     next: (snapshot) => {
-      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as T)));
+      onData(snapshot.docs.map((d) => normalizeDocument<T>(d.id, d.data())));
     },
     error: (err) => {
       console.warn(`listen ${coll} error:`, err);
@@ -115,7 +141,7 @@ export function listenDoc<T>(
 ) {
   return onSnapshot(doc(db, coll, id), {
     next: (snap) => {
-      onData(snap.exists() ? (snap.data() as T) : null);
+      onData(snap.exists() ? normalizeDocument<T>(snap.id, snap.data()) : null);
     },
     error: (err) => {
       console.warn(`listenDoc ${coll}/${id} error:`, err);
