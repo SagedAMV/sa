@@ -1,11 +1,13 @@
 /**
  * ملف الزبون — معلوماته + طلباته + ديونه
+ *
+ * ✅ تم الإصلاح: استخدام ORDER_STATUS_LABELS بدلاً من النص الخام
  */
 
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppStore } from '../../src/state/useAppStore';
-import { CUSTOMER_LEVEL_LABELS } from '../../src/utils/constants';
+import { CUSTOMER_LEVEL_LABELS, ORDER_STATUS_LABELS } from '../../src/utils/constants';
 
 export default function CustomerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,7 +51,7 @@ export default function CustomerProfileScreen() {
             <Text style={styles.orderDate}>{new Date(o.createdAt).toLocaleDateString('ar')}</Text>
             <Text style={styles.orderTotal}>{o.totalAmount.toLocaleString()} ر.ي</Text>
           </View>
-          <Text style={styles.orderStatus}>{o.status}</Text>
+          <Text style={styles.orderStatus}>{ORDER_STATUS_LABELS[o.status] || o.status}</Text>
           {o.remainingAmount > 0 ? (
             <Text style={styles.orderRemaining}>متبقي: {o.remainingAmount.toLocaleString()}</Text>
           ) : null}

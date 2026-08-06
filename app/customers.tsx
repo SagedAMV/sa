@@ -1,5 +1,7 @@
 /**
  * قائمة الزبائن — بحث فوري + إضافة + الاقتراح التلقائي
+ *
+ * ✅ تم الإصلاح: إضافة معالجة أخطاء في handleAdd
  */
 
 import { useState } from 'react';
@@ -31,10 +33,14 @@ export default function CustomersScreen() {
 
   async function handleAdd() {
     if (!user || !name.trim()) return;
-    await addCustomer(user.workspaceId, { name: name.trim(), phone: phone.trim() || undefined });
-    setName('');
-    setPhone('');
-    setShowAdd(false);
+    try {
+      await addCustomer(user.workspaceId, { name: name.trim(), phone: phone.trim() || undefined });
+      setName('');
+      setPhone('');
+      setShowAdd(false);
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'تعذر إضافة الزبون');
+    }
   }
 
   return (

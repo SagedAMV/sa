@@ -1,6 +1,8 @@
 /**
  * تفاصيل الطلب — المالك
  * الشرائح حسب المحل + الأسعار + المدفوع/المتبقي + تسجيل دفعة + سجل الحركات
+ *
+ * ✅ تم الإصلاح: استخدام constants.ts بدلاً من التكرار
  */
 
 import { useState } from 'react';
@@ -14,28 +16,15 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAppStore } from '../../src/state/useAppStore';
 import { recordPayment, changeOrderStatus, deleteOrder } from '../../src/data/repository/orderRepository';
 import { ORDER_STATUS, SEGMENT_STATUS, Order } from '../../src/data/model/Order';
-
-const STATUS_LABELS: Record<string, string> = {
-  new: 'جديد',
-  purchasing: 'قيد الشراء',
-  purchased: 'تم الشراء',
-  delivering: 'قيد التسليم',
-  delivered: 'تم التسليم',
-  cancelled: 'ملغي',
-};
-
-const SEG_LABELS: Record<string, string> = {
-  pending: 'لم يُشترَ بعد',
-  purchased: 'تم شراء الشريحة',
-  unavailable: 'غير متوفر في المحل',
-};
+import { ORDER_STATUS_LABELS, SEGMENT_STATUS_LABELS } from '../../src/utils/constants';
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter(); // ✅ إضافة router
   const orders = useAppStore((s) => s.orders);
   const user = useAppStore((s) => s.user);
   const hasPerm = useAppStore((s) => s.hasPermission);
@@ -93,7 +82,13 @@ export default function OrderDetailScreen() {
         text: 'حذف',
         style: 'destructive',
         onPress: async () => {
-          await deleteOrder(currentOrder.id);
+          try {
+            await deleteOrder(currentOrder.id);
+            Alert.alert('تم', 'تم حذف الطلب');
+            router.back(); // ✅ العودة للشاشة السابقة
+          } catch (e: any) {
+            Alert.alert('خطأ', e.message || 'تعذر حذف الطلب');
+          }
         },
       },
     ]);
@@ -105,7 +100,7 @@ export default function OrderDetailScreen() {
         <Text style={styles.customer}>{order.customerName}</Text>
         {order.customerPhone ? <Text style={styles.phone}>{order.customerPhone}</Text> : null}
         <View style={[styles.statusBadge, { backgroundColor: statusColor(order.status) }]}>
-          <Text style={styles.statusText}>{STATUS_LABELS[order.status]}</Text>
+          <Text style={styles.statusText}>{ORDER_STATUS_LABELS[order.status]}</Text>
         </View>
       </View>
 
@@ -115,7 +110,7 @@ export default function OrderDetailScreen() {
           <View style={styles.segmentHeader}>
             <Text style={styles.shopName}>🏪 {seg.shopName}</Text>
             <Text style={[styles.segStatus, { color: segColor(seg.status) }]}>
-              {SEG_LABELS[seg.status]}
+              {SEGMENT_STATUS_LABELS[seg.status]}
             </Text>
           </View>
           {seg.paidActualAmount > 0 ? (

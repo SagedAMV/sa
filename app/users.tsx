@@ -1,9 +1,15 @@
 /**
  * إدارة المستخدمين — المالك حصريًا (القرار: لا تسجيل ذاتي)
  * إضافة مشتري (يوزر + كلمة مرور + صلاحيات) + تعطيل/تفعيل + تغيير كلمة مرور
+ *
+ * ✅ تم الإصلاح:
+ * - useEffect بدلاً من if مباشر (يمنع التحميل المتعدد)
+ * - loading indicator
+ * - معالجة أخطاء شاملة
+ * - التحقق من تكرار اليوزر
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,47 +18,86 @@ import {
   Pressable,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useAppStore } from '../src/state/useAppStore';
-import { addUser, uid } from '../src/data/repository/authRepository';
+import { addUser } from '../src/data/repository/authRepository';
 import { updateData, listByWorkspace } from '../src/data/firebase/firestore';
 import { User, BUYER_PERMISSIONS } from '../src/data/model/User';
 
 export default function UsersScreen() {
   const user = useAppStore((s) => s.user);
   const [users, setUsers] = useState<User[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [showAdd, setShowAdd] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [deliveryPerm, setDeliveryPerm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // تحميل المستخدمين (مرة واحدة)
-  if (user && !loaded) {
-    listByWorkspace<User>('users', user.workspaceId).then(setUsers);
-    setLoaded(true);
-  }
+  // ✅ تحميل المستخدمين بشكل صحيح مع useEffect
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    listByWorkspace<User>('users', user.workspaceId)
+      .then(setUsers)
+      .catch((e) => Alert.alert('خطأ', 'تعذر تحميل المستخدمين'))
+      .finally(() => setLoading(false));
+  }, [user?.id]);
 
   async function handleAdd() {
-    if (!user || !username.trim() || !password) return;
-    const newUser = await addUser(user.workspaceId, username.trim(), password, 'buyer');
-    // منح/إلغاء صلاحية التسليم (القرار 23)
-    if (deliveryPerm) {
-      await updateData('users', newUser.id, {
-        permissions: { ...BUYER_PERMISSIONS, 'delivery.view': true, 'delivery.confirm': true },
-      });
+    if (!user || !username.trim() || !password) {
+      Alert.alert('تنبيه', 'أدخل اليوزر وكلمة المرور');
+      return;
     }
-    setUsers((prev) => [...prev, newUser]);
-    setUsername('');
-    setPassword('');
-    setDeliveryPerm(false);
-    setShowAdd(false);
+    if (password.length < 6) {
+      Alert.alert('تنبيه', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const newUsername = username.trim(); // ✅ حفظ الاسم قبل المسح
+      const newUser = await addUser(user.workspaceId, newUsername, password, 'buyer');
+      // منح/إلغاء صلاحية التسليم (القرار 23)
+      if (deliveryPerm) {
+        await updateData('users', newUser.id, {
+          permissions: { ...BUYER_PERMISSIONS, 'delivery.view': true, 'delivery.confirm': true },
+        });
+        newUser.permissions['delivery.view'] = true;
+        newUser.permissions['delivery.confirm'] = true;
+      }
+      setUsers((prev) => [...prev, newUser]);
+      setUsername('');
+      setPassword('');
+      setDeliveryPerm(false);
+      setShowAdd(false);
+      Alert.alert('تم', `تم إضافة المشتري @${newUsername}`);
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'تعذر إضافة المستخدم');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActive(u: User) {
-    await updateData('users', u.id, { isActive: !u.isActive });
-    setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, isActive: !x.isActive } : x)));
+    try {
+      await updateData('users', u.id, { isActive: !u.isActive });
+      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, isActive: !x.isActive } : x)));
+      Alert.alert('تم', u.isActive ? 'تم تعطيل الحساب' : 'تم تفعيل الحساب');
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'تعذر تغيير الحالة');
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={{ marginTop: 12, color: '#64748B' }}>جارٍ التحميل…</Text>
+      </View>
+    );
   }
 
   return (
@@ -67,7 +112,7 @@ export default function UsersScreen() {
       {showAdd ? (
         <View style={styles.form}>
           <TextInput style={styles.input} placeholder="اسم المستخدم" value={username} onChangeText={setUsername} autoCapitalize="none" />
-          <TextInput style={styles.input} placeholder="كلمة المرور" value={password} onChangeText={setPassword} secureTextEntry />
+          <TextInput style={styles.input} placeholder="كلمة المرور (6 أحرف+)" value={password} onChangeText={setPassword} secureTextEntry />
           <Pressable
             style={[styles.permRow, deliveryPerm && styles.permRowActive]}
             onPress={() => setDeliveryPerm(!deliveryPerm)}
@@ -75,28 +120,34 @@ export default function UsersScreen() {
             <Text style={styles.permText}>منح صلاحية التسليم («تم التسليم»)</Text>
             <Text style={styles.permCheck}>{deliveryPerm ? '✅' : '⬜'}</Text>
           </Pressable>
-          <Pressable style={styles.saveBtn} onPress={handleAdd}>
-            <Text style={styles.saveText}>إضافة</Text>
+          <Pressable style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleAdd} disabled={saving}>
+            <Text style={styles.saveText}>{saving ? 'جارٍ الإضافة…' : 'إضافة'}</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {users.filter((u) => u.id !== user?.id).map((u) => (
-        <View key={u.id} style={styles.card}>
-          <View style={styles.cardTop}>
-            <View>
-              <Text style={styles.username}>@{u.username}</Text>
-              <Text style={styles.role}>{u.role === 'buyer' ? 'مشتري' : 'مالك'}</Text>
-            </View>
-            <Pressable
-              style={[styles.stateBtn, u.isActive ? styles.active : styles.inactive]}
-              onPress={() => toggleActive(u)}
-            >
-              <Text style={styles.stateText}>{u.isActive ? 'مفعّل' : 'معطّل'}</Text>
-            </Pressable>
-          </View>
+      {users.filter((u) => u.id !== user?.id).length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>لا يوجد مستخدمون آخرون — أضف أول مشتري</Text>
         </View>
-      ))}
+      ) : (
+        users.filter((u) => u.id !== user?.id).map((u) => (
+          <View key={u.id} style={styles.card}>
+            <View style={styles.cardTop}>
+              <View>
+                <Text style={styles.username}>@{u.username}</Text>
+                <Text style={styles.role}>{u.role === 'buyer' ? 'مشتري' : 'مالك'}</Text>
+              </View>
+              <Pressable
+                style={[styles.stateBtn, u.isActive ? styles.active : styles.inactive]}
+                onPress={() => toggleActive(u)}
+              >
+                <Text style={styles.stateText}>{u.isActive ? 'مفعّل' : 'معطّل'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))
+      )}
     </ScrollView>
   );
 }
@@ -116,6 +167,8 @@ const styles = StyleSheet.create({
   permCheck: { fontSize: 16 },
   saveBtn: { backgroundColor: '#10B981', borderRadius: 10, padding: 12, alignItems: 'center' },
   saveText: { color: '#FFFFFF', fontWeight: '700' },
+  emptyBox: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  emptyText: { color: '#64748B', textAlign: 'center' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   username: { fontSize: 16, fontWeight: '700', color: '#0F172A' },

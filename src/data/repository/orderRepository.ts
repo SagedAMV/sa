@@ -126,19 +126,22 @@ export async function recordPayment(
   type: Payment['type'],
   userId: string,
 ) {
+  // ✅ جلب العملة من الطلب بدلاً من hardcode
+  const order = await getData<Order>('orders', orderId);
+  const currency = order?.currency || 'YER';
+
   const payment: Payment = {
     id: uid(),
     orderId,
     customerId,
     amount,
-    currency: 'YER',
+    currency,
     type,
     createdAt: Date.now(),
   };
   await createData('payments', payment.id, payment);
 
   // تحديث المدفوع/المتبقي في الطلب
-  const order = await getData<Order>('orders', orderId);
   if (order) {
     const paidAmount = order.paidAmount + amount;
     await updateData('orders', orderId, {
@@ -149,7 +152,7 @@ export async function recordPayment(
     });
   }
 
-  await logAction(orderId, userId, 'payment', `دفعة ${amount}`);
+  await logAction(orderId, userId, 'payment', `دفعة ${amount} ${currency}`);
   return payment;
 }
 

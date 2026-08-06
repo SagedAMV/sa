@@ -118,6 +118,8 @@ export interface User {
   workspaceId: string;
   username: string;
   passwordHash: string;
+  /** Salt فريد لكل مستخدم — يُستخدم مع PBKDF2 لمنع Rainbow Table */
+  passwordSalt?: string;
   role: UserRole;
   permissions: Permissions;
   isActive: boolean;

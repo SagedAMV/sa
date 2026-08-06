@@ -1,6 +1,8 @@
 /**
  * قائمة الطلبات — المالك
  * بحث فوري + ترشيح بالحالة + إضافة طلب
+ *
+ * ✅ تم الإصلاح: استخدام ORDER_STATUS_LABELS من constants.ts
  */
 
 import { useState } from 'react';
@@ -8,14 +10,15 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../src/state/useAppStore';
 import { Order, ORDER_STATUS } from '../src/data/model/Order';
+import { ORDER_STATUS_LABELS } from '../src/utils/constants';
 
 const FILTERS = [
   { key: 'all', label: 'الكل' },
-  { key: ORDER_STATUS.NEW, label: 'جديد' },
-  { key: ORDER_STATUS.PURCHASING, label: 'قيد الشراء' },
-  { key: ORDER_STATUS.PURCHASED, label: 'تم الشراء' },
-  { key: ORDER_STATUS.DELIVERING, label: 'قيد التسليم' },
-  { key: ORDER_STATUS.DELIVERED, label: 'تم التسليم' },
+  { key: ORDER_STATUS.NEW, label: ORDER_STATUS_LABELS.new },
+  { key: ORDER_STATUS.PURCHASING, label: ORDER_STATUS_LABELS.purchasing },
+  { key: ORDER_STATUS.PURCHASED, label: ORDER_STATUS_LABELS.purchased },
+  { key: ORDER_STATUS.DELIVERING, label: ORDER_STATUS_LABELS.delivering },
+  { key: ORDER_STATUS.DELIVERED, label: ORDER_STATUS_LABELS.delivered },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -91,7 +94,7 @@ export default function OrdersScreen() {
               <View style={styles.cardTop}>
                 <Text style={styles.customer}>{o.customerName}</Text>
                 <View style={[styles.badge, { backgroundColor: STATUS_COLORS[o.status] }]}>
-                  <Text style={styles.badgeText}>{labelOf(o.status)}</Text>
+                  <Text style={styles.badgeText}>{ORDER_STATUS_LABELS[o.status]}</Text>
                 </View>
               </View>
               <Text style={styles.cardMeta}>
@@ -106,18 +109,6 @@ export default function OrdersScreen() {
       </ScrollView>
     </View>
   );
-}
-
-function labelOf(s: string): string {
-  const map: Record<string, string> = {
-    new: 'جديد',
-    purchasing: 'قيد الشراء',
-    purchased: 'تم الشراء',
-    delivering: 'قيد التسليم',
-    delivered: 'تم التسليم',
-    cancelled: 'ملغي',
-  };
-  return map[s] || s;
 }
 
 const styles = StyleSheet.create({

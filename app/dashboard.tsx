@@ -1,12 +1,15 @@
 /**
  * لوحة التحكم — شاشة المالك الرئيسية
  * بطاقات إحصائية ملونة + أزرار سريعة + أحدث الطلبات + حالة الاتصال
+ *
+ * ✅ تم الإصلاح: استخدام ORDER_STATUS_LABELS من constants.ts
  */
 
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../src/state/useAppStore';
 import { ORDER_STATUS, Order } from '../src/data/model/Order';
+import { ORDER_STATUS_LABELS } from '../src/utils/constants';
 
 function countByStatus(orders: Order[], status: string): number {
   return orders.filter((o) => o.status === status).length;
@@ -78,7 +81,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.orderRow}>
               <Text style={styles.orderName}>{o.customerName}</Text>
-              <Text style={styles.orderStatus}>{statusLabel(o.status)}</Text>
+              <Text style={styles.orderStatus}>{ORDER_STATUS_LABELS[o.status]}</Text>
             </View>
             <Text style={styles.orderMeta}>
               {o.segments.length} محل • {o.totalAmount.toLocaleString()} {o.currency}
@@ -91,18 +94,6 @@ export default function DashboardScreen() {
       <Text style={styles.customerCount}>{customers.length} زبون مسجّل</Text>
     </ScrollView>
   );
-}
-
-function statusLabel(s: string): string {
-  const map: Record<string, string> = {
-    new: 'جديد',
-    purchasing: 'قيد الشراء',
-    purchased: 'تم الشراء',
-    delivering: 'قيد التسليم',
-    delivered: 'تم التسليم',
-    cancelled: 'ملغي',
-  };
-  return map[s] || s;
 }
 
 const styles = StyleSheet.create({

@@ -40,7 +40,18 @@ export default function ShopsScreen() {
   async function handleDelete(shopId: string, shopName: string) {
     Alert.alert('حذف محل', `حذف «${shopName}»؟ ستُحذف أصنافه.`, [
       { text: 'إلغاء', style: 'cancel' },
-      { text: 'حذف', style: 'destructive', onPress: () => deleteShop(shopId) },
+      {
+        text: 'حذف',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteShop(shopId);
+            Alert.alert('تم', `تم حذف «${shopName}»`);
+          } catch (e: any) {
+            Alert.alert('خطأ', e.message || 'تعذر حذف المحل');
+          }
+        },
+      },
     ]);
   }
 
