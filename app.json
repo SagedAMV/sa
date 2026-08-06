@@ -15,12 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tatbiqi.retail",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "bundleIdentifier": "com.tatbiqi.retail"
     },
     "android": {
       "package": "com.tatbiqi.retail",
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -36,8 +34,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-firebase/app",
-      "@react-native-firebase/messaging",
       "expo-image-picker",
       "expo-secure-store",
       [

@@ -1,10 +1,17 @@
 /**
- * رفع وتحميل الصور — Firebase Storage
- * النمط الرسمي لـ @react-native-firebase v26:
- * getStorage → ref → putFile → getDownloadURL
+ * رفع وتحميل الصور — Firebase JS SDK (Web-compatible)
+ * ✅ تم التحويل من @react-native-firebase إلى firebase/storage
+ *
+ * ملاحظة: في React Native، يجب تحويل localUri إلى Blob أولاً
  */
 
-import { getStorage, ref, putFile, getDownloadURL, deleteObject } from '@react-native-firebase/storage';
+import { storage } from './firebase';
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 
 /**
  * رفع صورة من الجهاز وإرجاع رابطها العام
@@ -17,23 +24,27 @@ export async function uploadImage(
 ): Promise<string> {
   // اسم فريد للملف
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`;
-  const reference = ref(getStorage(), `${folderName}/${fileName}`);
+  const storageRef = ref(storage, `${folderName}/${fileName}`);
 
-  // رفع الملف (putFile — النمط الأصلي لأجهزة Android/iOS)
-  await putFile(reference, localUri);
+  // تحويل localUri إلى Blob للرفع
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  // رفع الملف
+  await uploadBytes(storageRef, blob);
 
   // الحصول على الرابط العام
-  const url = await getDownloadURL(reference);
+  const url = await getDownloadURL(storageRef);
   return url;
 }
 
 /** حذف صورة من السحابة (عند حذف صنف) */
 export async function deleteImage(url: string) {
   try {
-    const reference = ref(getStorage(), url);
-    await deleteObject(reference);
+    const storageRef = ref(storage, url);
+    await deleteObject(storageRef);
   } catch (e) {
-    // تجاهل الأخطاء — الصورة قد تكون محذوفة مسبقًا
+    // تجاهل الأخطاء — الصورة قد تكون محذوفة مسبقاً
     console.warn('deleteImage failed', e);
   }
 }

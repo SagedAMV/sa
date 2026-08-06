@@ -1,7 +1,6 @@
 /**
- * عمليات Firestore — قراءة وكتابة عامة لكل الكيانات
- * النمط الرسمي لـ @react-native-firebase v26 (Modular API)
- * تعمل دون إنترنت (Offline Persistence) وتتزامن تلقائيًا
+ * عمليات Firestore — Firebase JS SDK (Web-compatible)
+ * ✅ تم التحويل من @react-native-firebase إلى firebase/firestore
  */
 
 import { db } from './firebase';
@@ -18,7 +17,7 @@ import {
   orderBy,
   onSnapshot,
   Timestamp,
-} from '@react-native-firebase/firestore';
+} from 'firebase/firestore';
 
 /** تحويل Timestamp إلى رقم (وقت ميللي) */
 export function toMillis(t: any): number {
@@ -70,7 +69,7 @@ export async function deleteData(coll: string, id: string) {
 /** قراءة واحدة */
 export async function getData<T>(coll: string, id: string): Promise<T | null> {
   const snap = await getDoc(doc(db, coll, id));
-  // ملاحظة: في v26، exists() دالة (ليست خاصية)
+  // exists() في Firebase JS SDK هي دالة
   return snap.exists() ? (snap.data() as T) : null;
 }
 
@@ -85,7 +84,7 @@ export async function listByWorkspace<T>(
     orderBy('createdAt', 'desc'),
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as T);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as T));
 }
 
 /** استماع مباشر (Live) — للتحديث الفوري بين الأجهزة */
@@ -100,7 +99,7 @@ export function listenCollection<T>(
   );
   return onSnapshot(q, {
     next: (snapshot) => {
-      onData(snapshot.docs.map((d) => d.data() as T));
+      onData(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as T)));
     },
     error: (err) => {
       console.warn(`listen ${coll} error:`, err);

@@ -14,10 +14,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-native-firebase/app": "26.1.0",
-    "@react-native-firebase/firestore": "26.1.0",
-    "@react-native-firebase/messaging": "26.1.0",
-    "@react-native-firebase/storage": "26.1.0",
+    "firebase": "^11.0.0",
     "expo": "~57.0.8",
     "expo-build-properties": "~57.0.8",
     "expo-constants": "~57.0.7",

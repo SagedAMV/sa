@@ -1,27 +1,37 @@
 /**
- * تهيئة Firebase — النمط الرسمي لـ @react-native-firebase v26
- * (Modular API — كما في الوثيقة الرسمية rnfirebase.io)
+ * تهيئة Firebase — Firebase JS SDK (Web-compatible)
+ * يعمل على Android + iOS + Web بدون google-services.json
  *
- * ملاحظة: لا نحتاج استدعاء initializeApp() يدويًا —
- * التهيئة تتم تلقائيًا من google-services.json (أندرويد).
+ * ✅ تم التحويل من @react-native-firebase إلى firebase JS SDK
  */
 
-import { getFirestore } from '@react-native-firebase/firestore';
-import { getStorage } from '@react-native-firebase/storage';
-import { getMessaging } from '@react-native-firebase/messaging';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
-// قاعدة البيانات (Offline Persistence مفعّل افتراضيًا على أندرويد)
-export const db = getFirestore();
+// إعدادات Firebase — من Firebase Console
+const firebaseConfig = {
+  apiKey: "AIzaSyBxgIwUTTaLKaukOzZIaRzSh8WU-1yUdIQ",
+  authDomain: "dool-4868b.firebaseapp.com",
+  projectId: "dool-4868b",
+  storageBucket: "dool-4868b.firebasestorage.app",
+  messagingSenderId: "606141826171",
+  appId: "1:606141826171:web:9a700d9c6c4f003b74cede",
+  measurementId: "G-D64LC286CR",
+};
 
-// تخزين الصور
-export const storage = getStorage();
+// تهيئة Firebase
+const app = initializeApp(firebaseConfig);
 
-// الإشعارات
-export const messaging = getMessaging();
+// قاعدة البيانات (Firestore)
+export const db = getFirestore(app);
+
+// تخزين الصور (Storage)
+export const storage = getStorage(app);
 
 /**
- * ملاحظات مؤكدة من الوثائق الرسمية (v26):
- * - New Architecture مطلوب — مُفعّل في app.json (newArchEnabled: true) ✅
- * - التخزين المحلي (Offline) مفعّل افتراضيًا على أندرويد — يعمل بدون إنترنت.
- * - حل التعارض الافتراضي: «آخر تعديل يكسب» — مطابق لقرارنا رقم 10. ✅
+ * ملاحظات:
+ * - Firebase JS SDK يعمل على جميع المنصات (Android/iOS/Web)
+ * - لا يحتاج google-services.json أو GoogleService-Info.plist
+ * - Offline Persistence: يجب تفعيله يدوياً إذا لزم الأمر
  */
