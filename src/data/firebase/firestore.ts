@@ -14,7 +14,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   Timestamp,
 } from 'firebase/firestore';
@@ -120,13 +119,18 @@ export async function listByWorkspace<T>(
   coll: string,
   workspaceId: string,
 ): Promise<T[]> {
-  const q = query(
-    collection(db, coll),
-    where('workspaceId', '==', workspaceId),
-    orderBy('createdAt', 'desc'),
-  );
+  // الترتيب مع where على workspaceId يتطلب فهرسًا مركبًا منفصلًا لكل مجموعة
+  // في Firestore. نقرأ حسب مساحة العمل فقط ثم نرتب محليًا كي لا تتعطل شاشة
+  // إدارة المستخدمين أو أي مجموعة جديدة عند عدم وجود ذلك الفهرس.
+  const q = query(collection(db, coll), where('workspaceId', '==', workspaceId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => normalizeDocument<T>(d.id, d.data()));
+  return snap.docs
+    .map((d) => normalizeDocument<T>(d.id, d.data()))
+    .sort((a, b) => {
+      const aCreatedAt = toMillis((a as { createdAt?: unknown }).createdAt);
+      const bCreatedAt = toMillis((b as { createdAt?: unknown }).createdAt);
+      return bCreatedAt - aCreatedAt;
+    });
 }
 
 /** استماع مباشر (Live) — للتحديث الفوري بين الأجهزة */
