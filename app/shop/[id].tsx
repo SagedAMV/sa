@@ -16,7 +16,8 @@ import {
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useAppStore } from '../../src/state/useAppStore';
-import { productsOfShop, addProduct, deleteProduct } from '../../src/data/repository/productRepository';
+import { productsOfShop, addProduct, updateProduct, deleteProduct } from '../../src/data/repository/productRepository';
+import { Product } from '../../src/data/model/Product';
 import { uploadImage } from '../../src/data/firebase/storage';
 import { Currency } from '../../src/data/model/Product';
 
@@ -37,6 +38,7 @@ export default function ShopDetailScreen() {
   const [size, setSize] = useState('');
   const [color, setColor] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function pickImage() {
@@ -48,13 +50,27 @@ export default function ShopDetailScreen() {
     }
   }
 
-  async function handleAdd() {
-    if (!user) {
-      Alert.alert('تعذر الحفظ', 'سجّل الدخول أولًا');
-      return;
-    }
-    if (!shop) {
-      Alert.alert('تعذر الحفظ', 'المحل غير موجود');
+  function resetForm() {
+    setShowAdd(false);
+    setEditingProduct(null);
+    setName(''); setBuyPrice(''); setSellPrice(''); setSize(''); setColor(''); setImageUri(null);
+  }
+
+  function startEdit(product: Product) {
+    setEditingProduct(product);
+    setName(product.name || '');
+    setBuyPrice(String(product.buyPrice));
+    setSellPrice(String(product.sellPrice));
+    setCurrency(product.sellCurrency);
+    setSize(product.size || '');
+    setColor(product.color || '');
+    setImageUri(product.imageUrl);
+    setShowAdd(true);
+  }
+
+  async function handleSave() {
+    if (!user || !shop) {
+      Alert.alert('تعذر الحفظ', 'تعذر العثور على بيانات المحل أو المستخدم');
       return;
     }
     if (!imageUri) {
@@ -64,8 +80,10 @@ export default function ShopDetailScreen() {
 
     setSaving(true);
     try {
-      const imageUrl = await uploadImage(imageUri, user.workspaceId, 'products');
-      await addProduct(user.workspaceId, {
+      const imageUrl = imageUri === editingProduct?.imageUrl
+        ? imageUri
+        : await uploadImage(imageUri, user.workspaceId, 'products');
+      const data = {
         shopId,
         name: name.trim() || undefined,
         imageUrl,
@@ -75,9 +93,13 @@ export default function ShopDetailScreen() {
         sellCurrency: currency,
         size: size.trim() || undefined,
         color: color.trim() || undefined,
-      });
-      setShowAdd(false);
-      setName(''); setBuyPrice(''); setSellPrice(''); setSize(''); setColor(''); setImageUri(null);
+      };
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, data);
+      } else {
+        await addProduct(user.workspaceId, data);
+      }
+      resetForm();
     } catch (e: any) {
       Alert.alert('خطأ', e.message || 'تعذر حفظ الصنف');
     } finally {
@@ -85,12 +107,27 @@ export default function ShopDetailScreen() {
     }
   }
 
+  function handleDelete(product: Product) {
+    Alert.alert('حذف صنف', `حذف «${product.name || 'هذا الصنف'}»؟`, [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'حذف', style: 'destructive', onPress: async () => {
+          try {
+            await deleteProduct(product.id);
+          } catch (e: any) {
+            Alert.alert('خطأ', e.message || 'تعذر حذف الصنف');
+          }
+        },
+      },
+    ]);
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>🏪 {shop?.name || 'المحل'}</Text>
       <Text style={styles.subtitle}>{shopProducts.length} صنف</Text>
 
-      <Pressable style={styles.addBtn} onPress={() => setShowAdd(!showAdd)}>
+      <Pressable style={styles.addBtn} onPress={() => showAdd ? resetForm() : setShowAdd(true)}>
         <Text style={styles.addBtnText}>{showAdd ? 'إغلاق' : '+ إضافة صنف'}</Text>
       </Pressable>
 
@@ -112,8 +149,8 @@ export default function ShopDetailScreen() {
             <TextInput style={[styles.input, styles.flex1]} placeholder="مقاس (اختياري)" value={size} onChangeText={setSize} />
             <TextInput style={[styles.input, styles.flex1]} placeholder="لون (اختياري)" value={color} onChangeText={setColor} />
           </View>
-          <Pressable style={[styles.saveBtn, saving && styles.disabled]} onPress={handleAdd} disabled={saving}>
-            <Text style={styles.saveText}>{saving ? 'جارٍ الحفظ…' : 'حفظ الصنف'}</Text>
+          <Pressable style={[styles.saveBtn, saving && styles.disabled]} onPress={handleSave} disabled={saving}>
+            <Text style={styles.saveText}>{saving ? 'جارٍ الحفظ…' : editingProduct ? 'حفظ التعديلات' : 'حفظ الصنف'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -122,7 +159,13 @@ export default function ShopDetailScreen() {
         <View key={p.id} style={styles.productCard}>
           <Image source={{ uri: p.imageUrl }} style={styles.productImage} />
           <View style={styles.productInfo}>
-            <Text style={styles.productName}>{p.name || 'بدون اسم'}</Text>
+            <View style={styles.productHeader}>
+              <Text style={styles.productName}>{p.name || 'بدون اسم'}</Text>
+              <View style={styles.actions}>
+                <Pressable onPress={() => startEdit(p)} hitSlop={8}><Text style={styles.editText}>تعديل</Text></Pressable>
+                <Pressable onPress={() => handleDelete(p)} hitSlop={8}><Text style={styles.deleteText}>حذف</Text></Pressable>
+              </View>
+            </View>
             <Text style={styles.productMeta}>
               شراء: {p.buyPrice} {p.buyCurrency} • بيع: {p.sellPrice} {p.sellCurrency}
             </Text>
@@ -156,7 +199,11 @@ const styles = StyleSheet.create({
   productCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   productImage: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#F1F5F9' },
   productInfo: { flex: 1, marginLeft: 12 },
-  productName: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
+  productHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  productName: { flex: 1, fontSize: 15, fontWeight: '700', color: '#0F172A' },
+  actions: { flexDirection: 'row', gap: 10 },
+  editText: { color: '#2563EB', fontSize: 12, fontWeight: '700' },
+  deleteText: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
   productMeta: { fontSize: 13, color: '#64748B', marginTop: 4 },
   productAttrs: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
 });

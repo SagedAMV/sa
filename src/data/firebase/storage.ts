@@ -6,12 +6,10 @@
  */
 
 import { Platform } from 'react-native';
-import { File } from 'expo-file-system';
 import { storage } from './firebase';
 import {
   ref,
   uploadBytes,
-  uploadString,
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
@@ -39,11 +37,30 @@ export async function uploadImage(
     if (!response.ok) throw new Error('تعذر قراءة الصورة المحددة');
     await uploadBytes(storageRef, await response.blob(), metadata);
   } else {
-    const localFile = new File(localUri);
-    await uploadString(storageRef, await localFile.base64(), 'base64', metadata);
+    // لا يعمل uploadString في بعض إصدارات Android/Hermes لأنه ينشئ Blob من
+    // ArrayBuffer. نقرأ الملف بواسطة XHR كي نحصل على Native Blob متوافق.
+    await uploadBytes(storageRef, await nativeBlobFromUri(localUri), metadata);
   }
 
   return getDownloadURL(storageRef);
+}
+
+/** تحويل URI المحلي إلى Blob أصلي متوافق مع Firebase على Android وiOS. */
+function nativeBlobFromUri(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.onerror = () => reject(new Error('تعذر قراءة الصورة المحددة'));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve(request.response as Blob);
+      } else {
+        reject(new Error('تعذر قراءة الصورة المحددة'));
+      }
+    };
+    request.responseType = 'blob';
+    request.open('GET', uri, true);
+    request.send();
+  });
 }
 
 function extensionFromUri(uri: string): string {
