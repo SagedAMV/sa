@@ -55,13 +55,26 @@ function nowTimestamp() {
   return Timestamp.now();
 }
 
+/**
+ * Firestore لا يقبل القيمة undefined. الحقول الاختيارية في نماذج التطبيق
+ * (مثل phone وnotes) قد تكون undefined، لذلك نحذفها قبل كل عملية كتابة.
+ * هذا يتيح ترك الحقل الاختياري فارغًا بدون أن يفشل حفظ المستند.
+ */
+function omitUndefined(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+}
+
 /** إنشاء أو تحديث كامل (set مع merge) — «آخر تعديل يكسب» */
 export async function setData(
   coll: string,
   id: string,
   data: Record<string, any>,
 ) {
-  await setDoc(doc(db, coll, id), { ...data, updatedAt: nowTimestamp() }, { merge: true });
+  await setDoc(
+    doc(db, coll, id),
+    { ...omitUndefined(data), updatedAt: nowTimestamp() },
+    { merge: true },
+  );
 }
 
 /** إنشاء جديد */
@@ -71,7 +84,7 @@ export async function createData(
   data: Record<string, any>,
 ) {
   await setDoc(doc(db, coll, id), {
-    ...data,
+    ...omitUndefined(data),
     id,
     createdAt: nowTimestamp(),
     updatedAt: nowTimestamp(),
@@ -84,7 +97,10 @@ export async function updateData(
   id: string,
   patch: Record<string, any>,
 ) {
-  await updateDoc(doc(db, coll, id), { ...patch, updatedAt: nowTimestamp() });
+  await updateDoc(doc(db, coll, id), {
+    ...omitUndefined(patch),
+    updatedAt: nowTimestamp(),
+  });
 }
 
 /** حذف */
