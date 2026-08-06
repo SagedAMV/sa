@@ -64,7 +64,12 @@ export default function OrdersScreen() {
       />
 
       {/* ترشيح بالحالة */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filtersRow}
+        contentContainerStyle={styles.filtersContent}
+      >
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
@@ -118,7 +123,10 @@ const styles = StyleSheet.create({
   addBtn: { backgroundColor: '#2563EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
   addBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   search: { marginHorizontal: 20, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, fontSize: 15, marginBottom: 10 },
-  filtersRow: { paddingHorizontal: 20, marginBottom: 10 },
+  // بدون هذه القيود يتمدّد الـ ScrollView الأفقي عموديًا داخل الحاوية المرنة،
+  // فتتحول أزرار الحالات إلى أعمدة طويلة على بعض أجهزة Android.
+  filtersRow: { flexGrow: 0, flexShrink: 0, height: 44, marginBottom: 10 },
+  filtersContent: { alignItems: 'center', paddingHorizontal: 20 },
   filterChip: { backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   filterChipActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   filterText: { color: '#334155', fontSize: 13 },

@@ -185,36 +185,53 @@ export default function OrderFormScreen() {
         placeholder="اسم الزبون…"
         onFocus={() => setShowSuggestions(true)}
       />
-      {showSuggestions && suggestions.length > 0 && (
-        <View style={styles.suggestionsBox}>
-          {suggestions.map((c) => (
-            <Pressable key={c.id} style={styles.suggestion} onPress={() => pickCustomer(c.id, c.name)}>
-              <Text style={styles.suggestionText}>{c.name}</Text>
-              {c.phone ? <Text style={styles.suggestionPhone}>{c.phone}</Text> : null}
-            </Pressable>
-          ))}
-        </View>
+      {customers.length === 0 ? (
+        <Pressable style={styles.setupHint} onPress={() => router.push('/customers')}>
+          <Text style={styles.setupHintText}>لا يوجد زبائن بعد — أضف زبونًا أولًا</Text>
+        </Pressable>
+      ) : (
+        showSuggestions && suggestions.length > 0 && (
+          <View style={styles.suggestionsBox}>
+            {suggestions.map((c) => (
+              <Pressable key={c.id} style={styles.suggestion} onPress={() => pickCustomer(c.id, c.name)}>
+                <Text style={styles.suggestionText}>{c.name}</Text>
+                {c.phone ? <Text style={styles.suggestionPhone}>{c.phone}</Text> : null}
+              </Pressable>
+            ))}
+          </View>
+        )
       )}
 
       {/* إضافة شريحة حسب المحل */}
       <Text style={styles.label}>الشرائح (حسب المحل)</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shopsRow}>
-        {shops.map((shop) => {
-          const active = segments.some((s) => s.shopId === shop.id);
-          return (
-            <Pressable
-              key={shop.id}
-              style={[styles.shopChip, active && styles.shopChipActive]}
-              onPress={() => addSegment(shop.id)}
-            >
-              <Text style={[styles.shopChipText, active && styles.shopChipTextActive]}>
-                {active ? '✓ ' : '+ '}
-                {shop.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {shops.length === 0 ? (
+        <Pressable style={styles.setupHint} onPress={() => router.push('/shops')}>
+          <Text style={styles.setupHintText}>لا توجد محلات بعد — أضف محلاً أولًا</Text>
+        </Pressable>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.shopsRow}
+          contentContainerStyle={styles.shopsContent}
+        >
+          {shops.map((shop) => {
+            const active = segments.some((s) => s.shopId === shop.id);
+            return (
+              <Pressable
+                key={shop.id}
+                style={[styles.shopChip, active && styles.shopChipActive]}
+                onPress={() => addSegment(shop.id)}
+              >
+                <Text style={[styles.shopChipText, active && styles.shopChipTextActive]}>
+                  {active ? '✓ ' : '+ '}
+                  {shop.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* الشرائح والأصناف */}
       {segments.map((seg) => {
@@ -299,7 +316,11 @@ const styles = StyleSheet.create({
   suggestion: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   suggestionText: { fontSize: 15, color: '#0F172A' },
   suggestionPhone: { fontSize: 12, color: '#64748B' },
-  shopsRow: { flexDirection: 'row' },
+  setupHint: { backgroundColor: '#EFF6FF', borderRadius: 10, padding: 12, marginTop: 6, borderWidth: 1, borderColor: '#BFDBFE' },
+  setupHintText: { color: '#1D4ED8', fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  // تثبيت ارتفاع شريط الاختيار الأفقي يمنع تمدده عموديًا على Android.
+  shopsRow: { flexGrow: 0, flexShrink: 0, height: 44 },
+  shopsContent: { alignItems: 'center', paddingHorizontal: 2 },
   shopChip: { backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   shopChipActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
   shopChipText: { color: '#334155', fontSize: 13 },
